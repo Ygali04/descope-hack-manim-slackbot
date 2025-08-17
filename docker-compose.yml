@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # Agent A - Slack Bot
+  slack-agent:
+    build: 
+      context: ./slack-agent
+      dockerfile: Dockerfile
+    container_name: manimpro-slack-agent
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    environment:
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+      - NODE_ENV=development
+      - AGENT_B_URL=http://manim-agent:8000
+      - DESCOPE_PROJECT_ID=${DESCOPE_PROJECT_ID:-dev-project}
+      - DESCOPE_MANAGEMENT_KEY=${DESCOPE_MANAGEMENT_KEY:-dev-key}
+      - DEV_JWT_SECRET=manimpro-dev-secret-change-in-production
+    depends_on:
+      - manim-agent
+    restart: unless-stopped
+    networks:
+      - manimpro-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Agent B - Manim Worker
+  manim-agent:
+    build: 
+      context: ./manim-agent
+      dockerfile: Dockerfile
+    container_name: manimpro-manim-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=development
+      - AGENT_B_AUD=manimpro-agent-b
+      - DESCOPE_JWKS_URL=${DESCOPE_JWKS_URL:-https://api.descope.com/v1/keys/dev-project}
+      - DEV_JWT_SECRET=manimpro-dev-secret-change-in-production
+      - MANIM_OUTPUT_DIR=/tmp/manim_output
+      - MANIM_CACHE_DIR=/tmp/manim_cache
+      - MANIM_QUALITY=medium_quality
+      - MANIM_TIMEOUT=300
+      - MCP_SERVER_NAME=manimpro-manim-agent
+      - MCP_VERSION=1.0.0
+      - ALLOWED_HOSTS=*
+      - HOST=0.0.0.0
+      - WORKERS=1
+      # Environment variables to help with NumPy/OpenBLAS threading
+      - OMP_NUM_THREADS=2
+      - OPENBLAS_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
+      - NUMEXPR_NUM_THREADS=2
+    restart: unless-stopped
+    networks:
+      - manimpro-network
+    volumes:
+      - manim-output:/tmp/manim_output
+      - manim-cache:/tmp/manim_cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # Increase resource limits and process limits for Manim rendering
+    ulimits:
+      nproc: 4096
+      nofile: 
+        soft: 4096
+        hard: 8192
+    deploy:
+      resources:
+        limits:
+          cpus: '3.0'
+          memory: 6G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    # Use init to properly handle process signals
+    init: true
+
+  # Optional: Redis for caching (if needed in future)
+  redis:
+    image: redis:7-alpine
+    container_name: manimpro-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - manimpro-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  manimpro-network:
+    driver: bridge
+
+volumes:
+  manim-output:
+  manim-cache: 
