@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import structlog
 
+# Configure matplotlib to avoid threading issues before any imports
+os.environ['MPLBACKEND'] = 'Agg'
+os.environ['MPLCONFIGDIR'] = '/home/manimpro/.matplotlib'
+import matplotlib
+matplotlib.use('Agg', force=True)
+
 logger = structlog.get_logger()
 
 class SafeRenderer:
@@ -92,43 +98,17 @@ class SafeRenderer:
         render_params: Dict[str, Any], 
         output_dir: Path
     ) -> list:
-        """Build safe Manim command with appropriate flags"""
+        """Build simple manim render command with threading constraints"""
         
-        # Base command
-        cmd = ["manim"]
-        
-        # Quality settings
-        quality = render_params.get('quality', 'medium_quality')
-        quality_flags = {
-            'low_quality': ['-ql'],
-            'medium_quality': ['-qm'], 
-            'high_quality': ['-qh'],
-            'production_quality': ['-qk']  # 4K - careful with this
-        }
-        cmd.extend(quality_flags.get(quality, ['-qm']))
-        
-        # Output directory
-        cmd.extend(['--media_dir', str(output_dir)])
-        
-        # Disable preview window (headless)
-        cmd.append('--disable_caching')
-        cmd.append('--verbose')
-        
-        # Custom resolution if specified
-        width = render_params.get('width')
-        height = render_params.get('height')
-        if width and height:
-            cmd.extend(['--resolution', f'{width},{height}'])
-        
-        # Frame rate
-        fps = render_params.get('fps', 30)
-        cmd.extend(['--frame_rate', str(fps)])
-        
-        # Output format
-        cmd.extend(['--format', 'mp4'])
-        
-        # Script and scene
-        cmd.extend([str(script_path), 'EducationalVideo'])
+        # Correct manim command: manim render [OPTIONS] FILE [SCENE_NAMES]
+        cmd = [
+            "manim", "render",
+            "--disable_caching",  # Disable caching to avoid file issues
+            "--verbosity", "WARNING",  # Reduce output to minimize threading issues
+            "--format", "mp4",  # Ensure MP4 output
+            str(script_path), 
+            "EducationalVideo"
+        ]
         
         return cmd
 
@@ -144,14 +124,25 @@ class SafeRenderer:
         })
         
         try:
-            # Run with timeout and resource limits
+            # Find the script path in the command (it's the file argument)
+            script_path = None
+            for arg in cmd:
+                if arg.endswith('.py'):
+                    script_path = arg
+                    break
+            
+            if script_path:
+                script_dir = os.path.dirname(script_path)
+            else:
+                script_dir = '/tmp'  # Fallback directory
+            
+            # Run with timeout from temp directory (no process limits to avoid threading issues)
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
-                cwd='/',  # Run from root to avoid path issues
-                preexec_fn=self._setup_process_limits if os.name != 'nt' else None
+                cwd=script_dir,  # Run from script directory where we have permissions
             )
             
             # Wait with timeout

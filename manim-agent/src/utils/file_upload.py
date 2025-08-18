@@ -38,9 +38,9 @@ async def upload_to_slack_url(upload_url: str, video_bytes: bytes) -> bool:
                 'Content-Length': str(len(video_bytes))
             }
             
-            # Upload using POST (some pre-signed URLs expect POST, others PUT)
-            # Try POST first, then PUT if it fails
-            methods_to_try = ['POST', 'PUT']
+            # Upload using PUT first (Slack typically expects PUT for pre-signed URLs)
+            # Then try POST as fallback
+            methods_to_try = ['PUT', 'POST']
             
             for method in methods_to_try:
                 try:
@@ -64,19 +64,26 @@ async def upload_to_slack_url(upload_url: str, video_bytes: bytes) -> bool:
                         
                         elif response.status in (405, 501):
                             # Method not allowed - try the other method
-                            logger.debug(f"{method} not allowed, trying next method",
+                            logger.info(f"{method} not allowed, trying next method",
+                                       method=method,
                                        status=response.status)
                             continue
                         
                         else:
-                            logger.error("Upload failed",
-                                       method=method,
-                                       status=response.status,
-                                       response=response_text[:500])
-                            # Don't try other methods for client errors
-                            if 400 <= response.status < 500:
+                            # For server errors (5xx), try the other method
+                            # For client errors (4xx), don't retry
+                            if 500 <= response.status < 600:
+                                logger.warning("Server error, trying next method",
+                                             method=method,
+                                             status=response.status,
+                                             response=response_text[:100])
+                                continue
+                            else:
+                                logger.error("Upload failed",
+                                           method=method,
+                                           status=response.status,
+                                           response=response_text[:500])
                                 return False
-                            continue
                             
                 except aiohttp.ClientError as e:
                     logger.error(f"Client error during {method} upload", 

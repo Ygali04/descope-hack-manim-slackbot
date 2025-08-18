@@ -40,52 +40,39 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - NODE_ENV=development
-      - AGENT_B_AUD=manimpro-agent-b
+      - PYTHON_ENV=development
       - DESCOPE_JWKS_URL=${DESCOPE_JWKS_URL:-https://api.descope.com/v1/keys/dev-project}
       - DEV_JWT_SECRET=manimpro-dev-secret-change-in-production
+      - DESCOPE_PROJECT_ID=${DESCOPE_PROJECT_ID:-dev-project}
+      - AGENT_B_AUD=manimpro-agent-b
       - MANIM_OUTPUT_DIR=/tmp/manim_output
       - MANIM_CACHE_DIR=/tmp/manim_cache
       - MANIM_QUALITY=medium_quality
-      - MANIM_TIMEOUT=300
-      - MCP_SERVER_NAME=manimpro-manim-agent
+      - MANIM_TIMEOUT=120
+      - MCP_SERVER_NAME=manimpro-agent-b
       - MCP_VERSION=1.0.0
-      - ALLOWED_HOSTS=*
-      - HOST=0.0.0.0
-      - WORKERS=1
-      # Environment variables to help with NumPy/OpenBLAS threading
-      - OMP_NUM_THREADS=2
-      - OPENBLAS_NUM_THREADS=2
-      - MKL_NUM_THREADS=2
-      - NUMEXPR_NUM_THREADS=2
-    restart: unless-stopped
+      - ALLOWED_HOSTS=slack-agent,localhost,127.0.0.1
+      - OPENBLAS_NUM_THREADS=1
+      - OMP_NUM_THREADS=1
+      - DISPLAY=:99
+      - MANIMGL_NO_PREVIEW=1
+      - MPLBACKEND=Agg
+              - MPLCONFIGDIR=/home/manimpro/.matplotlib
+      - FONTCONFIG_PATH=/etc/fonts
+              - FONTCONFIG_FILE=/etc/fonts/fonts.conf
+        - FC_DEBUG=0
+        - PANGOCAIRO_BACKEND=fc
+        - MANIM_FFMPEG_CODEC_H264=1
+    # Remove ulimits - they cause more threading issues than they solve
     networks:
       - manimpro-network
-    volumes:
-      - manim-output:/tmp/manim_output
-      - manim-cache:/tmp/manim_cache
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
-    # Increase resource limits and process limits for Manim rendering
-    ulimits:
-      nproc: 4096
-      nofile: 
-        soft: 4096
-        hard: 8192
-    deploy:
-      resources:
-        limits:
-          cpus: '3.0'
-          memory: 6G
-        reservations:
-          cpus: '1.0'
-          memory: 2G
-    # Use init to properly handle process signals
-    init: true
+      start_period: 40s
+    restart: unless-stopped
 
   # Optional: Redis for caching (if needed in future)
   redis:

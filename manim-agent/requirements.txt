@@ -1,27 +1,25 @@
+# Core web framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-pydantic==2.5.1
+
+# Authentication
 PyJWT==2.8.0
 cryptography==41.0.7
 requests==2.31.0
+
+# Manim Community Edition with threading constraints
+manim==0.18.0
+matplotlib==3.7.2
+
+# File handling
 python-multipart==0.0.6
 
-# Manim with compatible dependencies
-manim==0.18.0
+# HTTP client for async requests
+aiohttp==3.9.1
 
-# Let manim handle its own dependencies, don't specify conflicting versions
-# pillow - will be installed by manim
-# numpy - will be installed by manim  
-# scipy - will be installed by manim
-# matplotlib - will be installed by manim
-
-# Security and validation
-validators==0.22.0
-bleach==6.1.0
-
-# Development and monitoring
-python-dotenv==1.0.0
+# Logging and monitoring
 structlog==23.2.0
 
-# HTTP client for async requests
-aiohttp==3.9.1 
+# Development dependencies
+pytest==7.4.3
+pytest-asyncio==0.21.1 

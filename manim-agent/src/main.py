@@ -107,8 +107,8 @@ async def generate_and_render(
     try:
         body = await request.json()
         topic = body["topic"]
-        upload_url = body["upload_url"]
-        file_id = body["file_id"]
+        upload_url = body.get("upload_url")  # Optional for backwards compatibility
+        file_id = body.get("file_id")        # Optional for backwards compatibility
         render_params = body.get("render", {})
         
         # Validate request
@@ -117,7 +117,6 @@ async def generate_and_render(
         logger.info(
             "Render request received",
             topic=topic,
-            file_id=file_id,
             user=token_claims.get("act", {}).get("slack_user_id"),
             subject=token_claims.get("sub")
         )
@@ -139,18 +138,17 @@ async def generate_and_render(
         )
         logger.info("Rendered video", topic=topic, video_size=len(video_bytes))
         
-        # 3) Upload to Slack's pre-signed URL
-        upload_success = await upload_to_slack_url(upload_url, video_bytes)
-        if not upload_success:
-            raise HTTPException(status_code=502, detail="Failed to upload video to Slack")
+        # 3) Return video bytes as base64 for direct upload by Slack agent
+        import base64
+        video_base64 = base64.b64encode(video_bytes).decode('utf-8')
         
-        logger.info("Upload completed", topic=topic, file_id=file_id)
+        logger.info("Video encoded for direct upload", topic=topic, video_size=len(video_bytes))
         
         return {
             "ok": True,
-            "file_id": file_id,
             "topic": topic,
             "video_size": len(video_bytes),
+            "video_base64": video_base64,
             "actor": token_claims.get("sub"),
             "acting_for": token_claims.get("act", {}).get("slack_user_id")
         }
